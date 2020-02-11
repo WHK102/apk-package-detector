@@ -8,6 +8,9 @@
 APK Package Detector is a tool for **pentesters**, get the most common
 compilation and security properties of different types of files.
 
+*It does not require installing Java, SDK, external applications or packages with
+additional binaries.*
+
 
 ## Requirements
 
