@@ -51,11 +51,8 @@ class MainCls(object):
         zipFiles = []
 
         # Parse CLI arguments
-        argparseHandler = argparse.ArgumentParser(
-            add_help=False
-        )
+        argparseHandler = argparse.ArgumentParser(add_help=False)
 
-        # Add supported arguments
         argparseHandler.add_argument(
             '-h',
             '--help',
@@ -63,7 +60,6 @@ class MainCls(object):
             action='store_true'
         )
 
-        # For add or edit server
         argparseHandler.add_argument(
             '-o',
             '--out-format',
