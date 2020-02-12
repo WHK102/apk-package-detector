@@ -7,12 +7,25 @@ import os
 import zipfile
 import json
 import re
+import OpenSSL
+import OpenSSL.crypto
+from Crypto.Util import asn1
+from datetime import datetime
+from androguard.core.bytecodes.axml import AXMLPrinter
 
 
 class MainCls(object):
 
 
     def __init__(self):
+
+        # Current version
+        self.version = {
+            'major'   : 0,
+            'minor'   : 1,
+            'changes' : 2,
+            'release' : 'beta'
+        }
 
         # Results DTO Model
         self.results = {
@@ -23,10 +36,20 @@ class MainCls(object):
                     'target-is-not-found' : False,
                     'target-is-not-zip'   : False,
                     'target-is-not-jar'   : False,
-                    'target-is-not-apk'   : False,
+                    'target-is-not-apk'   : False
                 }
             },
             'result': {
+                'metadata' : {
+                    'app-name'                     : None,
+                    'author'                       : None,
+                    'package'                      : None,
+                    'packer'                       : None,
+                    'compile-sdk-version'          : None,
+                    'compile-sdk-version-codename' : None,
+                    'platform-build-version-code'  : None,
+                    'platform-build-version-name'  : None
+                },
                 'sub-frameworks': {
                     'cordova'      : False,
                     'appcelerator' : False
@@ -80,6 +103,19 @@ class MainCls(object):
             ) else 'human'
         )
 
+        if(self.printFormat == 'human'):
+            # Print the header
+            print(
+                '~ APK Package Detector v' +
+                (
+                    str(self.version['major']) + '.' +
+                    str(self.version['minor']) + '.' +
+                    str(self.version['changes']) + '-' +
+                    self.version['release']
+                ) +
+                ' - whk@elhacker.net ~'
+            )
+
         # Have arguments?
         if((len(sys.argv) < 2) or (argparseParsed.help)):
             return self.printHumanHelp()
@@ -109,6 +145,9 @@ class MainCls(object):
 
         # Extract all package names
         self.extractPackageNames()
+
+        # Extract all extra information
+        self.extractMetadata()
 
         # Technology detection
         self.checkFileIsCordova()
@@ -254,6 +293,64 @@ class MainCls(object):
                 if(self.results['result']['protections']['root-detector']):
                     break
 
+    def extractMetadata(self):
+
+        # Get the compiler version
+        manifest = self.readContent('META-INF/MANIFEST.MF')
+        packer = re.findall(r'Created-By:\s+(.+)', manifest)
+        if(len(packer) > 0):
+            self.results['result']['metadata']['packer'] = packer[0].strip()
+
+        # Get manifest data
+        manifestBinary = self.readContent('AndroidManifest.xml', binaryMode=True)
+        aPrinter = AXMLPrinter(manifestBinary)
+        lxmlObject = aPrinter.get_xml_obj()
+        
+        for data in [
+            [ 'package',                      'package'                           ],
+            [ 'compile-sdk-version',          'android:compileSdkVersion'         ],
+            [ 'compile-sdk-version-codename', 'android:compileSdkVersionCodename' ],
+            [ 'platform-build-version-code',  'platformBuildVersionCode'          ],
+            [ 'platform-build-version-name',  'platformBuildVersionName'          ]
+        ]:
+            self.results['result']['metadata'][data[0]] = str(lxmlObject.get(data[1]))
+
+        # Get data from compile certificate
+        # It is difficult to obtain separately the properties of type text
+        # in androguard.
+        
+        for certFilename in self.zipFiles:
+            if(re.match(r'META-INF\/[a-zA-Z0-9\-_\.]+?\.RSA', certFilename)):
+
+                certBinary = self.readContent(certFilename, binaryMode=True)
+                pkcs7      = OpenSSL.crypto.load_pkcs7_data(OpenSSL.crypto.FILETYPE_ASN1, certBinary)
+                cert       = self.get_certificates(pkcs7)[0]
+                issuer     = cert.get_issuer()
+
+                self.results['result']['metadata']['app-name'] = str(issuer.commonName)
+                self.results['result']['metadata']['author']   = str(issuer.organizationName)
+                break
+
+
+    def get_certificates(self, pkcs7):
+        from OpenSSL.crypto import _lib, _ffi, X509
+
+        certs = _ffi.NULL
+        if pkcs7.type_is_signed():
+            certs = pkcs7._pkcs7.d.sign.cert
+        elif pkcs7.type_is_signedAndEnveloped():
+            certs = pkcs7._pkcs7.d.signed_and_enveloped.cert
+
+        pycerts = []
+        for i in range(_lib.sk_X509_num(certs)):
+            #pycert = X509.__new__(X509)
+            pycert = X509()
+            pycert._x509 = _lib.sk_X509_value(certs, i)
+            pycerts.append(pycert)
+
+        return pycerts
+        
+
 
     def readContent(self, path, binaryMode=False):
 
@@ -307,7 +404,6 @@ class MainCls(object):
 
     def printHumanHelp(self):
 
-        self.printHumanHeader()
         print('\n'.join([
             'Get extended info from APK file.',
             'Use      : ' + sys.argv[0] + ' [options] [APK target file]',
@@ -320,11 +416,6 @@ class MainCls(object):
         ]))
 
 
-    def printHumanHeader(self):
-
-        print('~ APK Package Detector v0.1.1-b - whk@elhacker.net ~')
-
-
     def printResults(self, exitStatus=0):
         
         # The success status is injected
@@ -335,8 +426,6 @@ class MainCls(object):
             print(json.dumps(self.results, indent=4))
 
         else: # Human format
-
-            self.printHumanHeader()
 
             if(not self.results['status']['success']):
 
@@ -362,21 +451,29 @@ class MainCls(object):
             else:
 
                 if(self.results['result']['sub-frameworks']['cordova']):
-                    print('+ Framework used: Aache Cordova. https://cordova.apache.org/')
+                    framework = 'Apache Cordova. https://cordova.apache.org/'
 
                 elif(self.results['result']['sub-frameworks']['appcelerator']):
-                    print('+ Framework used: Appcelerartor. https://www.appcelerator.com/')
+                    framework = 'Appcelerartor. https://www.appcelerator.com/'
 
                 else:
-                    print('+ Framework used: Native or unknown Framework.')
+                    framework = 'Native or unknown Framework.'
 
                 print('\n'.join([
+                    '+ Metadata',
+                    '  - App name       : ' + str(self.results['result']['metadata']['app-name']),
+                    '  - Package        : ' + str(self.results['result']['metadata']['package']),
+                    '  - Author         : ' + str(self.results['result']['metadata']['author']),
+                    '  - Packer         : ' + str(self.results['result']['metadata']['packer']),
+                    '  - Compile SDK    : ' + str(self.results['result']['metadata']['compile-sdk-version-codename']),
+                    '  - Platform Build : ' + str(self.results['result']['metadata']['platform-build-version-name']),
+                    '  - Framework      : ' + framework,
                     '+ Protection systems :',
                     '  - Appcelerator Assets Obfuscation   : ' + ('Yes' if self.results['result']['protections']['appcelerator-obfuscation'] else 'No'),
                     '  - OkHttp3 Certificate Pinning       : ' + ('Yes' if self.results['result']['protections']['okhttp3-certificate-pinning'] else 'No'),
                     '  - Root and Virtual Machine detector : ' + ('Yes' if self.results['result']['protections']['root-detector'] else 'No')
                 ]))
-            
+
                 haveProtectionSystem = False
                 for value in self.results['result']['protections'].values():
                     if(value):
@@ -387,6 +484,7 @@ class MainCls(object):
                     print('  We have not found any protection system ¯\\_(ツ)_/¯')
 
         exit(exitStatus)
+
 
 
 if __name__ == '__main__':
