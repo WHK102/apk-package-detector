@@ -23,7 +23,7 @@ class MainCls(object):
         self.version = {
             'major'   : 0,
             'minor'   : 1,
-            'changes' : 2,
+            'changes' : 3,
             'release' : 'beta'
         }
 
@@ -50,10 +50,7 @@ class MainCls(object):
                     'platform-build-version-code'  : None,
                     'platform-build-version-name'  : None
                 },
-                'sub-frameworks': {
-                    'cordova'      : False,
-                    'appcelerator' : False
-                },
+                'sub-frameworks': [ ],
                 'protections': {
                     'appcelerator-obfuscation'    : False,
                     'okhttp3-certificate-pinning' : False,
@@ -150,8 +147,7 @@ class MainCls(object):
         self.extractMetadata()
 
         # Technology detection
-        self.checkFileIsCordova()
-        self.checkFileIsAppcelerator()
+        self.detectFramework()
 
         # Security detection
         self.checkContainsRootDetector()
@@ -205,9 +201,9 @@ class MainCls(object):
                 self.printResults(4)
 
 
-    def checkFileIsCordova(self):
+    def detectFramework(self):
 
-        # Check by package name
+        # Apache Cordova
         if(self.packageExists('org.apache.cordova')):
 
             # Files required by cordova compiles project
@@ -217,17 +213,97 @@ class MainCls(object):
                 'assets/www/cordova-js-src'
             ]:
                 if(fileToFind in self.zipFiles):
-                    self.results['result']['sub-frameworks']['cordova'] = True
+                    self.results['result']['sub-frameworks'].append({
+                        'namespace' : 'cordova',
+                        'human'     : 'Apache Cordova - https://cordova.apache.org/'
+                    })
+                    break
 
-
-    def checkFileIsAppcelerator(self):
-
+        # Appcelerator Titanium
         if(
             self.packageExists('appcelerator') or
             self.packageExists('org.appcelerator')
         ):
-            self.results['result']['sub-frameworks']['appcelerator'] = True
+            self.results['result']['sub-frameworks'].append({
+                'namespace' : 'titanium',
+                'human'     : 'Appcelerator Titanium - https://www.appcelerator.com/Titanium/'
+            })
             self.results['result']['protections']['appcelerator-obfuscation'] = True
+
+        # Cocos2d-x Game Engine
+        if(self.packageExists('org.cocos2dx')):
+            self.results['result']['sub-frameworks'].append({
+                'namespace' : 'cocos2dx',
+                'human'     : 'Cocos2d-x Game Engine - https://www.cocos2d-x.org/'
+            })
+
+        # Godot Game Engine
+        if(self.packageExists('org.godotengine')):
+            self.results['result']['sub-frameworks'].append({
+                'namespace' : 'godot',
+                'human'     : 'Godot Game Engine - https://godotengine.org/'
+            })
+
+        # Unity3d Game Engine
+        # if(self.packageExists('com.unity3d')): # ADS?
+        for fileName in self.zipFiles:
+            if(
+                fileName.endswith('libunity.so') or
+                (fileName == 'assets/bin/Data/Managed/UnityEngine.dll')
+            ):
+                self.results['result']['sub-frameworks'].append({
+                    'namespace' : 'unity3d',
+                    'human'     : 'Unity3d Game Engine - https://unity.com/'
+                })
+                break
+
+        # Unreal Game Engine
+        if(
+            self.packageExists('com.epicgames.ue')  or
+            self.packageExists('com.epicgames.ue1') or
+            self.packageExists('com.epicgames.ue2') or
+            self.packageExists('com.epicgames.ue3') or
+            self.packageExists('com.epicgames.ue4') or
+            self.packageExists('com.epicgames.ue5')
+        ):
+            self.results['result']['sub-frameworks'].append({
+                'namespace' : 'unreal',
+                'human'     : 'Unreal Game Engine - https://www.unrealengine.com/'
+            })
+
+        # ReactNative
+        if(
+            self.packageExists('com.reactnativecomponent')  or
+            self.packageExists('com.reactnativenavigation')
+        ):
+            self.results['result']['sub-frameworks'].append({
+                'namespace' : 'react-native',
+                'human'     : 'React Native - https://facebook.github.io/react-native/'
+            })
+
+        # CoronaSDK
+        if(self.packageExists('com.ansca.corona')):
+            self.results['result']['sub-frameworks'].append({
+                'namespace' : 'corona-sdk',
+                'human'     : 'CoronaSDK - https://coronalabs.com/'
+            })
+
+        # Ionic
+        if(
+            self.packageExists('io.ionic') or
+            ('assets/www/lib/ionic/js/ionic.js' in self.zipFiles)
+        ):
+            self.results['result']['sub-frameworks'].append({
+                'namespace' : 'ionic',
+                'human'     : 'Ionic (Apache Cordova Fork) - https://ionicframework.com/'
+            })
+
+        # Onsen UI
+        if('assets/www/lib/onsenui/js/onsenui.js' in self.zipFiles):
+            self.results['result']['sub-frameworks'].append({
+                'namespace' : 'onsen-ui',
+                'human'     : 'Onsen UI (Apache Cordova Fork) - https://onsen.io/'
+            })
 
     
     def checkContainsCertPinning(self):
@@ -376,12 +452,12 @@ class MainCls(object):
                 dexBinary = self.readContent(fileName, binaryMode=True)
 
                 # Lcom/google/firebase/components/ComponentDiscovery;
-                packages = re.findall(br'\[L[a-zA-Z0-9\-_\/\$]+?;', dexBinary)
+                packages = re.findall(br'L[a-zA-Z0-9\-_\/\$]+?;', dexBinary)
 
                 # Parse each string
                 if(packages):
                     for package in packages:
-                        package = package[2:][:-1].replace(b'/', b'.')
+                        package = package[1:][:-1].replace(b'/', b'.')
                         if(b'$' in package):
                             package = package.split(b'$')[0]
                         self.packages.append(package.decode(encoding='UTF-8'))
@@ -395,8 +471,8 @@ class MainCls(object):
 
     def packageExists(self, package):
 
-        for packageTocheck in self.packages:
-            if(packageTocheck.startswith(package)):
+        for packageToCheck in self.packages:
+            if(packageToCheck.startswith(package)):
                 return True
 
         return False
@@ -450,15 +526,6 @@ class MainCls(object):
 
             else:
 
-                if(self.results['result']['sub-frameworks']['cordova']):
-                    framework = 'Apache Cordova. https://cordova.apache.org/'
-
-                elif(self.results['result']['sub-frameworks']['appcelerator']):
-                    framework = 'Appcelerartor. https://www.appcelerator.com/'
-
-                else:
-                    framework = 'Native or unknown Framework.'
-
                 print('\n'.join([
                     '+ Metadata',
                     '  - App name       : ' + str(self.results['result']['metadata']['app-name']),
@@ -466,9 +533,19 @@ class MainCls(object):
                     '  - Author         : ' + str(self.results['result']['metadata']['author']),
                     '  - Packer         : ' + str(self.results['result']['metadata']['packer']),
                     '  - Compile SDK    : ' + str(self.results['result']['metadata']['compile-sdk-version-codename']),
-                    '  - Platform Build : ' + str(self.results['result']['metadata']['platform-build-version-name']),
-                    '  - Framework      : ' + framework,
-                    '+ Protection systems :',
+                    '  - Platform Build : ' + str(self.results['result']['metadata']['platform-build-version-name'])
+                ]))
+
+                print('+ Frameworks used')
+                if(len(self.results['result']['sub-frameworks']) > 0):
+                    for framework in self.results['result']['sub-frameworks']:
+                        print('  - ' + framework['human'])
+
+                else:
+                    print('  - Native or unknown Frameworks.')
+
+                print('\n'.join([
+                    '+ Protection systems',
                     '  - Appcelerator Assets Obfuscation   : ' + ('Yes' if self.results['result']['protections']['appcelerator-obfuscation'] else 'No'),
                     '  - OkHttp3 Certificate Pinning       : ' + ('Yes' if self.results['result']['protections']['okhttp3-certificate-pinning'] else 'No'),
                     '  - Root and Virtual Machine detector : ' + ('Yes' if self.results['result']['protections']['root-detector'] else 'No')

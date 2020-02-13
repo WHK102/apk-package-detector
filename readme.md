@@ -22,7 +22,7 @@ Example of execution:
 
 ```bash
 $ python3 apd.py
-~ APK Package Detector v0.1.2-beta - whk@elhacker.net ~
+~ APK Package Detector v0.1.3-beta - whk@elhacker.net ~
 Get extended info from APK file.
 Use      : apd.py [options] [APK target file]
 Options  :
@@ -33,7 +33,7 @@ Examples :
   apd.py -o json test.apk
 
 $ python3 apd.py test.apk 
-~ APK Package Detector v0.1.2-beta - whk@elhacker.net ~
+~ APK Package Detector v0.1.3-beta - whk@elhacker.net ~
 + Metadata
   - App name       : Example
   - Package        : com.example
@@ -41,7 +41,8 @@ $ python3 apd.py test.apk
   - Packer         : 1.8.0_181 (Oracle Corporation)
   - Compile SDK    : None
   - Platform Build : 8.0.0
-  - Framework      : Appcelerartor. https://www.appcelerator.com/
++ Frameworks used
+  - Apache Cordova - https://cordova.apache.org/
 + Protection systems :
   - Appcelerator Assets Obfuscation   : Yes
   - OkHttp3 Certificate Pinning       : No
@@ -56,5 +57,13 @@ $ python3 apd.py test.apk
 
 ## Frameworks supported to detection
 
-- Appcelerator
 - Apache Cordova
+- Ionic
+- Appcelerator Titanium
+- React Native
+- CoronaSDK
+- Onsen UI
+- Cocos2d-x Game Engine
+- Godot Game Engine
+- Unity3d Game Engine
+- Unreal Game Engine
